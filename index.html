@@ -1,0 +1,281 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Draco’s MP3 Converter</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      font-family: 'Poppins', sans-serif;
+      padding-bottom: env(safe-area-inset-bottom);
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+      position: relative;
+    }
+    .gradient-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #4b6cb7, #182848, #6b7280);
+      filter: blur(80px);
+      animation: gradientShift 15s ease-in-out infinite;
+      z-index: -2;
+    }
+    @keyframes gradientShift {
+      0% { transform: translate(0, 0); }
+      50% { transform: translate(20px, -20px); }
+      100% { transform: translate(0, 0); }
+    }
+    .rain {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      pointer-events: none;
+    }
+    .rain-drop {
+      position: absolute;
+      width: 2px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.3);
+      animation: fall 1s linear infinite;
+    }
+    @keyframes fall {
+      0% { transform: translateY(-100vh); }
+      100% { transform: translateY(100vh); }
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    h1 {
+      font-family: 'Dancing Script', cursive;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    input:focus {
+      -webkit-appearance: none;
+      outline: none;
+    }
+    button {
+      transition: transform 0.2s ease, background-color 0.3s ease;
+    }
+    button:active {
+      transform: scale(0.95);
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center">
+  <div class="gradient-bg"></div>
+  <div class="rain" id="rain"></div>
+  <div class="max-w-3xl w-full mx-6 p-10 container rounded-3xl shadow-2xl my-12 relative">
+    <h1 class="text-5xl font-bold text-white text-center mb-8">Draco’s MP3 Converter</h1>
+    <p class="text-gray-200 text-lg text-center mb-10">Paste a YouTube link to transform it into soothing MP3 vibes.</p>
+    
+    <div class="space-y-8">
+      <div>
+        <label for="youtube-url" class="block text-base font-medium text-gray-200 mb-3">YouTube Video URL</label>
+        <input 
+          type="url" 
+          id="youtube-url" 
+          placeholder="https://www.youtube.com/watch?v=..."
+          class="w-full px-5 py-4 bg-white bg-opacity-10 border border-gray-400 text-white placeholder-gray-400 rounded-xl focus:ring-2 focus:ring-purple-400 focus:border-purple-400 transition text-lg"
+          required
+        >
+      </div>
+      
+      <button 
+        id="convert-btn"
+        class="w-full bg-purple-600 text-white py-4 rounded-xl hover:bg-purple-700 focus:ring-4 focus:ring-purple-300 transition font-semibold text-lg touch-manipulation"
+      >
+        Convert to MP3
+      </button>
+      
+      <div id="result" class="hidden text-center">
+        <p id="status" class="text-gray-200 text-lg mb-6">Conversion complete!</p>
+        <a 
+          id="download-btn"
+          href="#" 
+          download
+          class="inline-block bg-teal-500 text-white px-8 py-4 rounded-xl hover:bg-teal-600 focus:ring-4 focus:ring-teal-300 transition font-semibold text-lg touch-manipulation"
+        >
+          Download MP3
+        </a>
+      </div>
+      
+      <div id="error" class="hidden text-red-400 text-center text-lg"></div>
+      
+      <button 
+        id="sound-toggle"
+        class="absolute top-4 right-4 text-gray-200 hover:text-white transition"
+        title="Toggle Rain Sound"
+      >
+        <svg id="sound-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Replace with a hosted rain sound MP3 file URL -->
+  <audio id="rain-sound" loop muted>
+    <source src="YOUR_RAIN_SOUND_URL_HERE.mp3" type="audio/mp3">
+  </audio>
+
+  <script>
+    // Rain effect
+    const rainContainer = document.getElementById('rain');
+    for (let i = 0; i < 50; i++) {
+      const drop = document.createElement('div');
+      drop.className = 'rain-drop';
+      drop.style.left = `${Math.random() * 100}%`;
+      drop.style.animationDelay = `${Math.random() * 2}s`;
+      rainContainer.appendChild(drop);
+    }
+
+    // Audio control
+    const audio = document.getElementById('rain-sound');
+    const soundToggle = document.getElementById('sound-toggle');
+    const soundIcon = document.getElementById('sound-icon');
+    let isPlaying = false;
+
+    soundToggle.addEventListener('click', () => {
+      if (isPlaying) {
+        audio.pause();
+        soundIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />';
+      } else {
+        audio.muted = false;
+        audio.play().catch(() => {});
+        soundIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />';
+      }
+      isPlaying = !isPlaying;
+    });
+
+    soundToggle.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      soundToggle.click();
+    }, { passive: false });
+
+    // Converter logic
+    const form = document.getElementById('youtube-url');
+    const convertBtn = document.getElementById('convert-btn');
+    const resultDiv = document.getElementById('result');
+    const errorDiv = document.getElementById('error');
+    const statusText = document.getElementById('status');
+    const downloadBtn = document.getElementById('download-btn');
+
+    const handleConvert = async () => {
+      const url = form.value.trim();
+      
+      resultDiv.classList.add('hidden');
+      errorDiv.classList.add('hidden');
+      
+      if (!url || !url.includes('youtube.com') && !url.includes('youtu.be')) {
+        errorDiv.classList.remove('hidden');
+        errorDiv.textContent = 'Please enter a valid YouTube URL.';
+        return;
+      }
+      
+      convertBtn.disabled = true;
+      convertBtn.textContent = 'Converting...';
+
+      /* 
+        To make the download work, you need a backend API to convert the YouTube video to MP3.
+        Example: Set up a Node.js server with ytdl-core or use a third-party API.
+        The fetch below is a placeholder. Replace with your API endpoint.
+      */
+      try {
+        // Placeholder API call
+        // const response = await fetch('YOUR_BACKEND_API_ENDPOINT', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify({ url })
+        // });
+        // const data = await response.json();
+        // if (data.mp3Url) {
+        //   downloadBtn.href = data.mp3Url;
+        //   downloadBtn.setAttribute('download', 'converted.mp3');
+        //   statusText.textContent = 'Conversion complete!';
+        //   resultDiv.classList.remove('hidden');
+        // } else {
+        //   throw new Error('Conversion failed');
+        // }
+
+        // Simulate successful conversion (remove this in real implementation)
+        setTimeout(() => {
+          statusText.textContent = 'Conversion complete (simulated)!';
+          downloadBtn.href = '#'; // Replace with real MP3 URL from backend
+          downloadBtn.setAttribute('download', 'converted.mp3');
+          resultDiv.classList.remove('hidden');
+          
+          convertBtn.disabled = false;
+          convertBtn.textContent = 'Convert to MP3';
+        }, 2000);
+      } catch (error) {
+        errorDiv.classList.remove('hidden');
+        errorDiv.textContent = 'Error during conversion. Please try again.';
+        convertBtn.disabled = false;
+        convertBtn.textContent = 'Convert to MP3';
+      }
+    };
+
+    convertBtn.addEventListener('click', handleConvert);
+    convertBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      handleConvert();
+    }, { passive: false });
+
+    downloadBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      window.location.href = downloadBtn.href;
+    }, { passive: false });
+  </script>
+</body>
+</html>
